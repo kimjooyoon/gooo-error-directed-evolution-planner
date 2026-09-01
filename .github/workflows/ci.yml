@@ -47,7 +47,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           started=$(date +%s%3N)
+          set +e
           /usr/bin/time -v go test -run '^$' ./... > "$RUNNER_TEMP/planner-ci/compile.log" 2> "$RUNNER_TEMP/planner-ci/metrics/compile.time"
+          status=$?
+          set -e
+          sed -n '1,260p' "$RUNNER_TEMP/planner-ci/compile.log"
+          test "$status" -eq 0
           finished=$(date +%s%3N)
           rss=$(awk -F: '/Maximum resident set size/{gsub(/ /,"",$2);print $2+0}' "$RUNNER_TEMP/planner-ci/metrics/compile.time")
           jq -n --argjson wall_ms "$((finished-started))" --argjson peak_rss_kib "${rss:-0}" '{wall_ms:$wall_ms,peak_rss_kib:$peak_rss_kib}' > "$RUNNER_TEMP/planner-ci/metrics/compile.json"
@@ -98,6 +103,7 @@ jobs:
         if: always()
         run: |
           set -Eeuo pipefail
+          if ! test -f "$RUNNER_TEMP/planner-ci/go-test.json"; then exit 0; fi
           tracked=$(git ls-files | grep -v '^README.md$' || true)
           regular_files=$(printf '%s\n' "$tracked" | awk 'NF {count++} END {print count+0}')
           go_files=$(printf '%s\n' "$tracked" | awk '$0 ~ /\.go$/ {count++} END {print count+0}')
@@ -159,4 +165,5 @@ jobs:
             ${{ runner.temp }}/planner-ci/conformance/**
             ${{ runner.temp }}/planner-ci/upstream/upstream-report.json
             ${{ runner.temp }}/planner-ci/ci-metrics.json
+            ${{ runner.temp }}/planner-ci/compile.log
             ${{ runner.temp }}/planner-ci/go-test.json
