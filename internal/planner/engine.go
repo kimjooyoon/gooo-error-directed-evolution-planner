@@ -157,7 +157,7 @@ func PlanScenario(options PlanOptions, contract Contract, contractRaw []byte) (P
 		phaseDigest := Digest([]byte(candidateText))
 		oracle := RunCompilerOracle(options.Compiler, candidatePath)
 		decision, reason, accepted := candidateDecision(counterexample.Repair, kind, oracle)
-		passed, total, good, regressed := guardrailResult(oracle, guardrails)
+		passed, total, good, _ := guardrailResult(oracle, guardrails)
 		if decision == DecisionClosed && (!passed || good != total) {
 			decision = DecisionRefuted
 			reason = "guardrail corpus regression blocks candidate closure"
