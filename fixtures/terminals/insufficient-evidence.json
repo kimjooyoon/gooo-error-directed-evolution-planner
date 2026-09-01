@@ -1,0 +1,15 @@
+{
+  "schema": "gooo/reflexive-terminal-record/v1",
+  "decision": "UNKNOWN",
+  "stage": "SEMANTIC_IR_READ",
+  "step": "READ_GENERATED_SEMANTIC_IR",
+  "reason": "generated semantic IR is missing from the caller evidence",
+  "unknown_class": "DIRECT_MISSING",
+  "next_operation": "REGENERATE_SEMANTIC_IR",
+  "blocked_by": ["SEMANTIC_IR_BYTES"],
+  "cause_edge": {"from":"VerifyReplay","to":"EmitBackend","value_type":"SemanticIR"},
+  "minimal_frontier": [{"from":"VerifyReplay","to":"EmitBackend","value_type":"SemanticIR"}],
+  "counterexample": "insufficient-evidence",
+  "counterexample_digest": "sha256:2e2f0d3c7d6ce0b7f1b3a2ed9b4f3a2f6c4d5e6f708192a3b4c5d6e7f8091a2b"
+}
+

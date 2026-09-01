@@ -1,0 +1,15 @@
+{
+  "schema": "gooo/reflexive-terminal-record/v1",
+  "decision": "CLOSED",
+  "stage": "TERMINAL",
+  "step": "CLOSE_AFTER_REPLAY_CORPUS",
+  "reason": "replay corpus preserved CLOSED UNKNOWN REFUTED states",
+  "unknown_class": "",
+  "next_operation": "RETAIN_BASELINE",
+  "blocked_by": [],
+  "cause_edge": {"from":"VerifyReplay","to":"Evidence","value_type":"Evidence"},
+  "minimal_frontier": [{"from":"VerifyReplay","to":"Evidence","value_type":"Evidence"}],
+  "counterexample": "replay-closed-corpus",
+  "counterexample_digest": "sha256:2e2f0d3c7d6ce0b7f1b3a2ed9b4f3a2f6c4d5e6f708192a3b4c5d6e7f8091a2b"
+}
+

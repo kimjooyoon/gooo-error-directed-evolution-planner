@@ -1,0 +1,14 @@
+{
+  "schema": "gooo/error-directed-evolution-planner/denominator/v1",
+  "id": "error-directed-evolution-planner-v1",
+  "scenario_count": 5,
+  "scenarios": [
+    {"id":"known-4-activity","expected":"CLOSED"},
+    {"id":"insufficient-evidence","expected":"UNKNOWN"},
+    {"id":"reason-changing-candidate","expected":"REFUTED"},
+    {"id":"ambiguous-equal-candidates","expected":"UNKNOWN"},
+    {"id":"replay-closed-corpus","expected":"CLOSED"}
+  ],
+  "root_readme_inventory_excluded": true
+}
+

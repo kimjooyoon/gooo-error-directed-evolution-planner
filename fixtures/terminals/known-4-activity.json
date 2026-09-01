@@ -1,0 +1,15 @@
+{
+  "schema": "gooo/reflexive-terminal-record/v1",
+  "decision": "REFUTED",
+  "stage": "PHASE_GRAPH",
+  "step": "CHECK_ACTIVITY_CARDINALITY",
+  "reason": "phase graph must declare exactly three executable activities",
+  "unknown_class": "",
+  "next_operation": "REPAIR_PHASE_GRAPH",
+  "blocked_by": [],
+  "cause_edge": {"from":"NormalizeSource","to":"EmitBackend","value_type":"SemanticIR"},
+  "minimal_frontier": [{"from":"NormalizeSource","to":"EmitBackend","value_type":"SemanticIR"}],
+  "counterexample": "known-4-activity",
+  "counterexample_digest": "sha256:2e2f0d3c7d6ce0b7f1b3a2ed9b4f3a2f6c4d5e6f708192a3b4c5d6e7f8091a2b"
+}
+

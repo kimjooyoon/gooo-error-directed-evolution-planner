@@ -1,0 +1,28 @@
+{
+  "schema": "gooo/semantic-counterexample/v1",
+  "id": "known-4-activity",
+  "scenario": "known-4-activity",
+  "source_digest": "sha256:06e9b87d7e33188901cb66366c513749db1db3c4c89bbeb17bc3e5b64791dc34",
+  "toolchain_digest": "sha256:e2147def056543c506d158ecd95cd8e666d91bfbaf1571d5b07aef4dc99ca112",
+  "baseline_phase_digest": "sha256:15b863f62595ff33f1ed4fbb46036622aa16d596aa8a86554196e340d396edfd",
+  "decision": "REFUTED",
+  "reason": "phase graph must declare exactly three executable activities",
+  "reason_digest": "sha256:f1c8f0b3f52029d3c5c1fa23595289eea937fbecbee22d1e615c1501c5c979a5",
+  "minimized_graph": {
+    "schema": "gooo/semantic_graph/v1",
+    "nodes": [
+      {"id":"activity-1","kind":"activity","label":"fetch inputs","payload":"activity payload one"},
+      {"id":"activity-2","kind":"activity","label":"normalize source","payload":"activity payload two"},
+      {"id":"activity-3","kind":"activity","label":"verify semantics","payload":"activity payload three"},
+      {"id":"activity-4","kind":"activity","label":"publish result","payload":"activity payload four"}
+    ],
+    "edges": [
+      {"id":"edge-1","from":"activity-1","to":"activity-2","kind":"depends_on","payload":"dependency one"},
+      {"id":"edge-2","from":"activity-2","to":"activity-3","kind":"depends_on","payload":"dependency two"},
+      {"id":"edge-3","from":"activity-3","to":"activity-4","kind":"depends_on","payload":"dependency three"}
+    ]
+  },
+  "repair": {"accepted_operations":["SPLIT"],"expected_decision":"CLOSED","expected_reason":"SPLIT_COUNTEREXAMPLE_RESOLVED","expected_activity_count":4,"expected_localization_stages":2,"reason_must_match":true},
+  "provenance": {"compiler_repository":"kimjooyoon/gooo-reflexive-compiler-slice","compiler_release":"v0.3.0","reducer_repository":"kimjooyoon/gooo-semantic-counterexample-reducer","reducer_release":"v0.1.1","asset_digest":"sha256:1124d7378125128900827e82f8ab87ab3751b7ab0c06b9fd29e081ed9d28a37c"}
+}
+
