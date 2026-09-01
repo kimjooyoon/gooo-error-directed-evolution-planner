@@ -48,7 +48,7 @@ jobs:
           set -Eeuo pipefail
           started=$(date +%s%3N)
           set +e
-          /usr/bin/time -v go test -run '^$' ./... > "$RUNNER_TEMP/planner-ci/compile.log" 2> "$RUNNER_TEMP/planner-ci/metrics/compile.time"
+          /usr/bin/time -v sh -c 'go test -run "^$" ./...' > "$RUNNER_TEMP/planner-ci/compile.log" 2> "$RUNNER_TEMP/planner-ci/metrics/compile.time"
           status=$?
           set -e
           sed -n '1,260p' "$RUNNER_TEMP/planner-ci/compile.log"
