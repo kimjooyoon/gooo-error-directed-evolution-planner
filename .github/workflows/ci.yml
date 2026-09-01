@@ -80,11 +80,17 @@ jobs:
         run: |
           set -Eeuo pipefail
           started=$(date +%s%3N)
+          set +e
           /usr/bin/time -v "$RUNNER_TEMP/planner-ci/planner" conformance \
             --contract .gooo/evolution-planner.gooo \
             --repo-root "$GITHUB_WORKSPACE" \
             --compiler "$RUNNER_TEMP/planner-ci/gooo-reflexive-compiler-slice" \
             --out "$RUNNER_TEMP/planner-ci/conformance" > "$RUNNER_TEMP/planner-ci/conformance.stdout.json" 2> "$RUNNER_TEMP/planner-ci/metrics/conformance.time"
+          status=$?
+          set -e
+          sed -n '1,260p' "$RUNNER_TEMP/planner-ci/conformance.stdout.json"
+          sed -n '1,260p' "$RUNNER_TEMP/planner-ci/metrics/conformance.time"
+          test "$status" -eq 0
           finished=$(date +%s%3N)
           rss=$(awk -F: '/Maximum resident set size/{gsub(/ /,"",$2);print $2+0}' "$RUNNER_TEMP/planner-ci/metrics/conformance.time")
           jq -n --argjson wall_ms "$((finished-started))" --argjson peak_rss_kib "${rss:-0}" '{wall_ms:$wall_ms,peak_rss_kib:$peak_rss_kib}' > "$RUNNER_TEMP/planner-ci/metrics/conformance.json"
@@ -120,7 +126,11 @@ jobs:
           done <<< "$tracked"
           subdirectories=$(find . -mindepth 1 -type d -not -path './.git' -not -path './.git/*' | wc -l | tr -d ' ')
           generated_files=$(find "$RUNNER_TEMP/planner-ci/conformance" -type f | wc -l | tr -d ' ')
-          generated_bytes=$(find "$RUNNER_TEMP/planner-ci/conformance" -type f -print0 | xargs -0 stat -c '%s' | awk '{total += $1} END {print total+0}')
+          if test "$generated_files" -gt 0; then
+            generated_bytes=$(find "$RUNNER_TEMP/planner-ci/conformance" -type f -print0 | xargs -0 stat -c '%s' | awk '{total += $1} END {print total+0}')
+          else
+            generated_bytes=0
+          fi
           test_total=$(jq -s '[.[] | select(.Action == "run" and (.Test // "") != "")] | length' "$RUNNER_TEMP/planner-ci/go-test.json")
           test_selected="$test_total"
           test_executed=$(jq -s '[.[] | select((.Action == "pass" or .Action == "fail") and (.Test // "") != "")] | length' "$RUNNER_TEMP/planner-ci/go-test.json")
