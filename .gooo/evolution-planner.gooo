@@ -1,0 +1,22 @@
+gooo error_directed_evolution_planner v1
+
+authority metacode
+denominator id=error-directed-evolution-planner-v1 scenarios=5 unit=scenario
+decision statuses=CLOSED,UNKNOWN,REFUTED
+precedence REFUTED>UNKNOWN>CLOSED
+unknown_fields stage,step,reason,unknown_class,next_operation,blocked_by
+source_policy terminal=immutable_release counterexample=immutable_release candidate=caller_owned_temp
+toolchain go=1.27 digest=sha256:e2147def056543c506d158ecd95cd8e666d91bfbaf1571d5b07aef4dc99ca112
+
+operation ordinal=1 kind=ADD target=activity cost=1
+operation ordinal=2 kind=RETIRE target=activity cost=1
+operation ordinal=3 kind=SPLIT target=activity cost=1
+operation ordinal=4 kind=REWIRE target=edge cost=1
+candidate_order SPLIT,ADD,RETIRE,REWIRE
+generation_plan order=candidate-bundle.json,causal-rationale.json,rollback-receipt.json,candidate-phase.gooo,planner-report.json
+
+scenario ordinal=1 id=known-4-activity terminal=fixtures/terminals/known-4-activity.json terminal_digest=sha256:3a678900ea1abe41fb156f22c41e383fd0d41dc1ece2bd91c114ff4238f43dd1 counterexample=fixtures/counterexamples/known-4-activity.json counterexample_digest=sha256:6e4e0f65eebbfb896a29161a36b3590da2adf237ccf97cfb67d4e393786e8051 guardrails=fixtures/guardrails/replay-closed-corpus.json expected=CLOSED
+scenario ordinal=2 id=insufficient-evidence terminal=fixtures/terminals/insufficient-evidence.json terminal_digest=sha256:3093e9b8ffe4c0bd18c4de380bb35dc38baaa66c844bdacf6230bb92b314389c counterexample=fixtures/counterexamples/insufficient-evidence.json counterexample_digest=sha256:0a1ec264adfd860b142b63561407e52612d56ac7850fa758a335c979fe7c9396 guardrails=fixtures/guardrails/replay-closed-corpus.json expected=UNKNOWN
+scenario ordinal=3 id=reason-changing-candidate terminal=fixtures/terminals/reason-changing-candidate.json terminal_digest=sha256:3e2e61dbcee8f2ad339ea137bdb696211ea0ef7f4495069103cd29f5f07d52d2 counterexample=fixtures/counterexamples/reason-changing-candidate.json counterexample_digest=sha256:e524570e85a073e8665b25b25c9b1e92a9be0d9c2b1201da2bf48d4808546426 guardrails=fixtures/guardrails/replay-closed-corpus.json expected=REFUTED
+scenario ordinal=4 id=ambiguous-equal-candidates terminal=fixtures/terminals/ambiguous-equal-candidates.json terminal_digest=sha256:b1bcf626e4711a2e1590a3c45d1db25c694bc29df6f49117c54210c01f1d1421 counterexample=fixtures/counterexamples/ambiguous-equal-candidates.json counterexample_digest=sha256:8801d5537726ef10374c09a4b9c8923969e7c1616ff5f6b2a278d3c70da925ae guardrails=fixtures/guardrails/replay-closed-corpus.json expected=UNKNOWN
+scenario ordinal=5 id=replay-closed-corpus terminal=fixtures/terminals/replay-closed-corpus.json terminal_digest=sha256:521fccb58a5addb7b52351307f111046b12f07c2ffc4f56b92c87ad31aa2cecb counterexample=fixtures/counterexamples/replay-closed-corpus.json counterexample_digest=sha256:ea0923b8658d87594c84ff3f13f4a4f9275d2e7bef4af4c0a2468e11304df8b6 guardrails=fixtures/guardrails/replay-closed-corpus.json expected=CLOSED

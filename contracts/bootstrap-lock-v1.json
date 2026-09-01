@@ -1,0 +1,10 @@
+{
+  "schema": "gooo/error-directed-evolution-planner/bootstrap-lock/v1",
+  "bootstrap_repository": "kimjooyoon/gooo-repository-bootstrap",
+  "bootstrap_release": "v0.1.1",
+  "bootstrap_exception": "BOOTSTRAP_EXCEPTION",
+  "bootstrap_commit_paths": [".gitignore", "LICENSE", "README.md"],
+  "post_bootstrap_direct_main": 0,
+  "implementation_pull_requests_max_open": 1
+}
+

@@ -1,0 +1,162 @@
+name: error-directed-evolution-planner
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.x'
+          check-latest: true
+
+      - name: Prepare caller-owned CI evidence
+        run: mkdir -p "$RUNNER_TEMP/planner-ci/metrics" "$RUNNER_TEMP/planner-ci/conformance"
+
+      - name: Verify immutable upstream releases and assets
+        run: bash scripts/verify-upstream.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/planner-ci/upstream"
+
+      - name: Extract released compiler oracle
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/planner-ci/compiler"
+          tar -xzf "$RUNNER_TEMP/planner-ci/upstream/assets/gooo-reflexive-compiler-slice-linux-amd64-v0.3.0.tar.gz" -C "$RUNNER_TEMP/planner-ci/compiler"
+          compiler=$(find "$RUNNER_TEMP/planner-ci/compiler" -type f -perm -111 | head -n 1)
+          test -n "$compiler"
+          cp "$compiler" "$RUNNER_TEMP/planner-ci/gooo-reflexive-compiler-slice"
+          chmod +x "$RUNNER_TEMP/planner-ci/gooo-reflexive-compiler-slice"
+
+      - name: Check Go formatting
+        run: test -z "$(gofmt -l $(git ls-files '*.go'))"
+
+      - name: Compile packages and measure
+        run: |
+          set -Eeuo pipefail
+          started=$(date +%s%3N)
+          /usr/bin/time -v go test -run '^$' ./... > "$RUNNER_TEMP/planner-ci/compile.log" 2> "$RUNNER_TEMP/planner-ci/metrics/compile.time"
+          finished=$(date +%s%3N)
+          rss=$(awk -F: '/Maximum resident set size/{gsub(/ /,"",$2);print $2+0}' "$RUNNER_TEMP/planner-ci/metrics/compile.time")
+          jq -n --argjson wall_ms "$((finished-started))" --argjson peak_rss_kib "${rss:-0}" '{wall_ms:$wall_ms,peak_rss_kib:$peak_rss_kib}' > "$RUNNER_TEMP/planner-ci/metrics/compile.json"
+
+      - name: Vet and build planner
+        run: |
+          set -Eeuo pipefail
+          go vet ./...
+          started=$(date +%s%3N)
+          /usr/bin/time -v go build -trimpath -o "$RUNNER_TEMP/planner-ci/planner" ./cmd/gooo-error-directed-evolution-planner > "$RUNNER_TEMP/planner-ci/build.log" 2> "$RUNNER_TEMP/planner-ci/metrics/build.time"
+          finished=$(date +%s%3N)
+          rss=$(awk -F: '/Maximum resident set size/{gsub(/ /,"",$2);print $2+0}' "$RUNNER_TEMP/planner-ci/metrics/build.time")
+          jq -n --argjson wall_ms "$((finished-started))" --argjson peak_rss_kib "${rss:-0}" '{wall_ms:$wall_ms,peak_rss_kib:$peak_rss_kib}' > "$RUNNER_TEMP/planner-ci/metrics/build.json"
+
+      - name: Run Go tests with exact counters
+        run: |
+          set -Eeuo pipefail
+          started=$(date +%s%3N)
+          /usr/bin/time -v go test -json -count=1 ./... > "$RUNNER_TEMP/planner-ci/go-test.json" 2> "$RUNNER_TEMP/planner-ci/metrics/test.time"
+          finished=$(date +%s%3N)
+          rss=$(awk -F: '/Maximum resident set size/{gsub(/ /,"",$2);print $2+0}' "$RUNNER_TEMP/planner-ci/metrics/test.time")
+          jq -n --argjson wall_ms "$((finished-started))" --argjson peak_rss_kib "${rss:-0}" '{wall_ms:$wall_ms,peak_rss_kib:$peak_rss_kib}' > "$RUNNER_TEMP/planner-ci/metrics/test.json"
+
+      - name: Run fixed planner corpus through released compiler oracle
+        run: |
+          set -Eeuo pipefail
+          started=$(date +%s%3N)
+          /usr/bin/time -v "$RUNNER_TEMP/planner-ci/planner" conformance \
+            --contract .gooo/evolution-planner.gooo \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --compiler "$RUNNER_TEMP/planner-ci/gooo-reflexive-compiler-slice" \
+            --out "$RUNNER_TEMP/planner-ci/conformance" > "$RUNNER_TEMP/planner-ci/conformance.stdout.json" 2> "$RUNNER_TEMP/planner-ci/metrics/conformance.time"
+          finished=$(date +%s%3N)
+          rss=$(awk -F: '/Maximum resident set size/{gsub(/ /,"",$2);print $2+0}' "$RUNNER_TEMP/planner-ci/metrics/conformance.time")
+          jq -n --argjson wall_ms "$((finished-started))" --argjson peak_rss_kib "${rss:-0}" '{wall_ms:$wall_ms,peak_rss_kib:$peak_rss_kib}' > "$RUNNER_TEMP/planner-ci/metrics/conformance.json"
+          jq -e '.decision == "CLOSED" and .scenarios == 5 and .closed == 2 and .unknown == 2 and .refuted == 1 and .failed == 0' "$RUNNER_TEMP/planner-ci/conformance/conformance-report.json" >/dev/null
+          jq -e '
+            (.results | map(select(.scenario == "known-4-activity"))[0] | .decision == "CLOSED" and .bundle.selected.kind == "SPLIT" and .self_improvement.status == "CLOSED") and
+            (.results | map(select(.scenario == "insufficient-evidence"))[0] | .decision == "UNKNOWN" and .bundle.unknown.stage != "" and .bundle.unknown.step != "" and .bundle.unknown.reason != "" and .bundle.unknown.unknown_class != "" and .bundle.unknown.next_operation != "" and (.bundle.unknown.blocked_by | length) > 0) and
+            (.results | map(select(.scenario == "reason-changing-candidate"))[0] | .decision == "REFUTED") and
+            (.results | map(select(.scenario == "ambiguous-equal-candidates"))[0] | .decision == "UNKNOWN" and .bundle.unknown.unknown_class == "AMBIGUOUS_EQUAL_CANDIDATES") and
+            (.results | map(select(.scenario == "replay-closed-corpus"))[0] | .decision == "CLOSED" and .self_improvement.status == "CLOSED") and
+            (all(.results[]; .bundle.authority.repository_writes == 0 and .bundle.authority.merge_authority == 0 and .bundle.adoption.applied_to_input == false and .bundle.improvement.status == "UNKNOWN"))
+          ' "$RUNNER_TEMP/planner-ci/conformance/conformance-report.json" >/dev/null
+          test "$(git status --porcelain)" = ""
+
+      - name: Record exact integer inventory and runtime metrics
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          tracked=$(git ls-files | grep -v '^README.md$' || true)
+          regular_files=$(printf '%s\n' "$tracked" | awk 'NF {count++} END {print count+0}')
+          go_files=$(printf '%s\n' "$tracked" | awk '$0 ~ /\.go$/ {count++} END {print count+0}')
+          gooo_files=$(printf '%s\n' "$tracked" | awk '$0 ~ /\.gooo$/ {count++} END {print count+0}')
+          go_lines=0
+          gooo_lines=0
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            lines=$(awk 'END {print NR+0}' "$file")
+            case "$file" in
+              *.go) go_lines=$((go_lines+lines)) ;;
+              *.gooo) gooo_lines=$((gooo_lines+lines)) ;;
+            esac
+          done <<< "$tracked"
+          subdirectories=$(find . -mindepth 1 -type d -not -path './.git' -not -path './.git/*' | wc -l | tr -d ' ')
+          generated_files=$(find "$RUNNER_TEMP/planner-ci/conformance" -type f | wc -l | tr -d ' ')
+          generated_bytes=$(find "$RUNNER_TEMP/planner-ci/conformance" -type f -print0 | xargs -0 stat -c '%s' | awk '{total += $1} END {print total+0}')
+          test_total=$(jq -s '[.[] | select(.Action == "run" and (.Test // "") != "")] | length' "$RUNNER_TEMP/planner-ci/go-test.json")
+          test_selected="$test_total"
+          test_executed=$(jq -s '[.[] | select((.Action == "pass" or .Action == "fail") and (.Test // "") != "")] | length' "$RUNNER_TEMP/planner-ci/go-test.json")
+          test_reused=$(jq -s '[.[] | select(.Action == "output" and ((.Output // "") | contains("(cached)")))] | length' "$RUNNER_TEMP/planner-ci/go-test.json")
+          test_failed=$(jq -s '[.[] | select(.Action == "fail" and (.Test // "") != "")] | length' "$RUNNER_TEMP/planner-ci/go-test.json")
+          test_unknown=$(jq -s '[.[] | select(.Action == "skip" and (.Test // "") != "")] | length' "$RUNNER_TEMP/planner-ci/go-test.json")
+          compile_rss=$(jq -r '.peak_rss_kib' "$RUNNER_TEMP/planner-ci/metrics/compile.json")
+          build_rss=$(jq -r '.peak_rss_kib' "$RUNNER_TEMP/planner-ci/metrics/build.json")
+          test_rss=$(jq -r '.peak_rss_kib' "$RUNNER_TEMP/planner-ci/metrics/test.json")
+          conformance_rss=$(jq -r '.peak_rss_kib' "$RUNNER_TEMP/planner-ci/metrics/conformance.json")
+          peak_rss=$((compile_rss > build_rss ? compile_rss : build_rss))
+          peak_rss=$((peak_rss > test_rss ? peak_rss : test_rss))
+          peak_rss=$((peak_rss > conformance_rss ? peak_rss : conformance_rss))
+          jq -n \
+            --arg repository "$GITHUB_REPOSITORY" --arg commit "$GITHUB_SHA" --arg go_version "$(go version)" \
+            --argjson go_files "$go_files" --argjson gooo_files "$gooo_files" --argjson go_physical_lines "$go_lines" --argjson gooo_physical_lines "$gooo_lines" \
+            --argjson physical_lines "$((go_lines+gooo_lines))" --argjson regular_files "$regular_files" --argjson subdirectories "$subdirectories" \
+            --argjson generated_files "$generated_files" --argjson generated_bytes "$generated_bytes" \
+            --argjson compile_ms "$(jq -r '.wall_ms' "$RUNNER_TEMP/planner-ci/metrics/compile.json")" --argjson build_ms "$(jq -r '.wall_ms' "$RUNNER_TEMP/planner-ci/metrics/build.json")" \
+            --argjson test_ms "$(jq -r '.wall_ms' "$RUNNER_TEMP/planner-ci/metrics/test.json")" --argjson conformance_ms "$(jq -r '.wall_ms' "$RUNNER_TEMP/planner-ci/metrics/conformance.json")" \
+            --argjson integration_ms "$(jq -r '.wall_ms' "$RUNNER_TEMP/planner-ci/metrics/conformance.json")" --argjson peak_rss_kib "$peak_rss" \
+            --argjson total "$test_total" --argjson selected "$test_selected" --argjson executed "$test_executed" --argjson reused "$test_reused" --argjson failed "$test_failed" --argjson unknown "$test_unknown" \
+            '{schema:"gooo/error-directed-evolution-planner/ci-metrics/v1",repository:$repository,commit:$commit,go_version:$go_version,go_files:$go_files,gooo_files:$gooo_files,go_physical_lines:$go_physical_lines,gooo_physical_lines:$gooo_physical_lines,physical_lines:$physical_lines,regular_files:$regular_files,subdirectories:$subdirectories,root_readme_inventory_excluded:true,generated_artifacts:{count:$generated_files,bytes:$generated_bytes},compile_ms:$compile_ms,build_ms:$build_ms,test_ms:$test_ms,conformance_ms:$conformance_ms,integration_ms:$integration_ms,peak_rss_kib:$peak_rss_kib,tests:{total:$total,selected:$selected,executed:$executed,reused:$reused,failed:$failed,unknown:$unknown},repository_writes:0,input_repository_changed:false}' > "$RUNNER_TEMP/planner-ci/ci-metrics.json"
+          jq -e '([.go_files,.gooo_files,.go_physical_lines,.gooo_physical_lines,.physical_lines,.regular_files,.subdirectories,.generated_artifacts.count,.generated_artifacts.bytes,.compile_ms,.build_ms,.test_ms,.conformance_ms,.integration_ms,.peak_rss_kib,.tests.total,.tests.selected,.tests.executed,.tests.reused,.tests.failed,.tests.unknown] | all(type == "number" and floor == .)) and .root_readme_inventory_excluded == true and .repository_writes == 0' "$RUNNER_TEMP/planner-ci/ci-metrics.json" >/dev/null
+
+      - name: Publish verification summary
+        if: always()
+        run: |
+          {
+            echo '## Error-directed evolution planner'
+            echo
+            if test -f "$RUNNER_TEMP/planner-ci/conformance/conformance-report.json"; then jq -r '"- corpus: \(.closed) CLOSED / \(.unknown) UNKNOWN / \(.refuted) REFUTED; failures=\(.failed)"' "$RUNNER_TEMP/planner-ci/conformance/conformance-report.json"; fi
+            if test -f "$RUNNER_TEMP/planner-ci/ci-metrics.json"; then jq -r '"- inventory: \(.go_files) Go files / \(.gooo_files) Gooo files / \(.regular_files) regular files / \(.subdirectories) directories; root README excluded=\(.root_readme_inventory_excluded)"' "$RUNNER_TEMP/planner-ci/ci-metrics.json"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gooo-error-directed-evolution-planner-${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/planner-ci/conformance/**
+            ${{ runner.temp }}/planner-ci/upstream/upstream-report.json
+            ${{ runner.temp }}/planner-ci/ci-metrics.json
+            ${{ runner.temp }}/planner-ci/go-test.json

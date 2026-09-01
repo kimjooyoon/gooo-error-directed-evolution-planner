@@ -1,0 +1,134 @@
+name: immutable error-directed evolution planner release
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact merged main commit to release
+        required: true
+        type: string
+      release_version:
+        description: New unused 0.x.y version; failed releases are never reused
+        required: true
+        default: '0.1.0'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      RELEASE_VERSION: ${{ inputs.release_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.x'
+          check-latest: true
+
+      - name: Bind exact merged commit and refuse reuse
+        run: |
+          set -Eeuo pipefail
+          case "$RELEASE_VERSION" in 0.*.*) ;; *) exit 64 ;; esac
+          RELEASE_TAG="v$RELEASE_VERSION"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse --abbrev-ref HEAD)" = main
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then exit 1; fi
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >/dev/null 2>&1; then exit 1; fi
+
+      - name: Verify upstream locks and build released oracle
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/planner-release/upstream" "$RUNNER_TEMP/planner-release/compiler"
+          bash scripts/verify-upstream.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/planner-release/upstream"
+          tar -xzf "$RUNNER_TEMP/planner-release/upstream/assets/gooo-reflexive-compiler-slice-linux-amd64-v0.3.0.tar.gz" -C "$RUNNER_TEMP/planner-release/compiler"
+          compiler=$(find "$RUNNER_TEMP/planner-release/compiler" -type f -perm -111 | head -n 1)
+          test -n "$compiler"
+          cp "$compiler" "$RUNNER_TEMP/planner-release/compiler-oracle"
+          chmod +x "$RUNNER_TEMP/planner-release/compiler-oracle"
+          go vet ./...
+          test -z "$(gofmt -l $(git ls-files '*.go'))"
+          go build -trimpath -o "$RUNNER_TEMP/planner-release/planner" ./cmd/gooo-error-directed-evolution-planner
+
+      - name: Re-run fixed corpus on exact release subject
+        run: |
+          set -Eeuo pipefail
+          "$RUNNER_TEMP/planner-release/planner" conformance \
+            --contract .gooo/evolution-planner.gooo \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --compiler "$RUNNER_TEMP/planner-release/compiler-oracle" \
+            --out "$RUNNER_TEMP/planner-release/conformance"
+          jq -e '.decision == "CLOSED" and .failed == 0 and .closed == 2 and .unknown == 2 and .refuted == 1' "$RUNNER_TEMP/planner-release/conformance/conformance-report.json" >/dev/null
+
+      - name: Assemble six immutable release assets
+        run: |
+          set -Eeuo pipefail
+          release="$RUNNER_TEMP/planner-release/assets"
+          mkdir -p "$release"
+          source="gooo-error-directed-evolution-planner-source-$RELEASE_TAG.tar.gz"
+          binary="gooo-error-directed-evolution-planner-linux-amd64-$RELEASE_TAG.tar.gz"
+          report="planner-report-$RELEASE_TAG.json"
+          manifest="release-manifest-$RELEASE_TAG.json"
+          git archive --format=tar.gz --prefix="gooo-error-directed-evolution-planner-$RELEASE_TAG/" "$EXPECTED_SHA" > "$release/$source"
+          tar -czf "$release/$binary" -C "$RUNNER_TEMP/planner-release" planner
+          cp "$RUNNER_TEMP/planner-release/conformance/conformance-report.json" "$release/$report"
+          jq -n --arg schema "gooo/error-directed-evolution-planner/release/v1" --arg version "$RELEASE_VERSION" --arg tag "$RELEASE_TAG" --arg commit "$EXPECTED_SHA" --arg compiler_release "v0.3.0" --arg reducer_release "v0.1.1" '{schema:$schema,version:$version,tag:$tag,commit:$commit,scope:"CANDIDATE_ONLY_ERROR_DIRECTED_EVOLUTION",compiler_release:$compiler_release,reducer_release:$reducer_release,immutable_release_required:true,automatic_merge:false,repository_writes:0}' > "$release/version.json"
+          source_digest="sha256:$(sha256sum "$release/$source" | awk '{print $1}')"
+          binary_digest="sha256:$(sha256sum "$release/$binary" | awk '{print $1}')"
+          report_digest="sha256:$(sha256sum "$release/$report" | awk '{print $1}')"
+          version_digest="sha256:$(sha256sum "$release/version.json" | awk '{print $1}')"
+          jq -n --arg schema "gooo/error-directed-evolution-planner/release-manifest/v1" --arg version "$RELEASE_VERSION" --arg tag "$RELEASE_TAG" --arg commit "$EXPECTED_SHA" --arg source "$source" --arg source_digest "$source_digest" --arg binary "$binary" --arg binary_digest "$binary_digest" --arg report "$report" --arg report_digest "$report_digest" --arg version_digest "$version_digest" '{schema:$schema,version:$version,tag:$tag,commit:$commit,assets:[{name:$source,digest:$source_digest},{name:$binary,digest:$binary_digest},{name:$report,digest:$report_digest},{name:"version.json",digest:$version_digest}]}' > "$release/$manifest"
+          (cd "$release" && sha256sum "$source" "$binary" "$report" version.json "$manifest" > SHA256SUMS)
+          (cd "$release" && sha256sum -c SHA256SUMS)
+
+      - name: Create annotated tag once and publish release
+        run: |
+          set -Eeuo pipefail
+          release="$RUNNER_TEMP/planner-release/assets"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$RELEASE_TAG" "$EXPECTED_SHA" -m "gooo-error-directed-evolution-planner $RELEASE_TAG"
+          git push origin "refs/tags/$RELEASE_TAG"
+          gh release create "$RELEASE_TAG" --verify-tag --title "gooo-error-directed-evolution-planner $RELEASE_TAG" --notes 'Immutable candidate-only release verified by GitHub Actions.' "$release"/*
+
+      - name: Audit immutable release, annotated tag, and exact asset digests
+        run: |
+          set -Eeuo pipefail
+          release="$RUNNER_TEMP/planner-release/assets"
+          data=$(gh api -H 'X-GitHub-Api-Version: 2026-03-10' "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG")
+          jq -e --arg tag "$RELEASE_TAG" '.tag_name == $tag and .draft == false and .prerelease == false and .immutable == true and (.assets | length) == 6' <<<"$data" >/dev/null
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG")
+          test "$(jq -r '.object.type' <<<"$ref")" = tag
+          tag_object=$(jq -r '.object.sha' <<<"$ref")
+          tag_body=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_object")
+          test "$(jq -r '.object.type' <<<"$tag_body")" = commit
+          test "$(jq -r '.object.sha' <<<"$tag_body")" = "$EXPECTED_SHA"
+          expected='[]'
+          for file in "$release"/*; do
+            name=$(basename "$file")
+            size=$(stat -c '%s' "$file")
+            digest="sha256:$(sha256sum "$file" | awk '{print $1}')"
+            expected=$(jq --arg name "$name" --arg digest "$digest" --argjson size "$size" '. + [{name:$name,size:$size,digest:$digest}]' <<<"$expected")
+          done
+          observed=$(jq '[.assets[] | {name,size,digest}] | sort_by(.name)' <<<"$data")
+          test "$(jq -cS . <<<"$expected")" = "$(jq -cS . <<<"$observed")"
+          jq -n --arg schema "gooo/error-directed-evolution-planner/release-audit/v1" --arg repository "$GITHUB_REPOSITORY" --arg tag "$RELEASE_TAG" --arg commit "$EXPECTED_SHA" --argjson release_id "$(jq '.id' <<<"$data")" --arg tag_object "$tag_object" --argjson assets "$observed" '{schema:$schema,repository:$repository,tag:$tag,release_id:$release_id,tag_object:$tag_object,target_commit:$commit,immutable:true,annotated_tag:true,assets:$assets}' > "$RUNNER_TEMP/planner-release/release-audit.json"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gooo-error-directed-evolution-planner-${{ inputs.release_version }}-release-audit
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/planner-release/release-audit.json
+            ${{ runner.temp }}/planner-release/assets/*

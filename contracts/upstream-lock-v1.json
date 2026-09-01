@@ -1,0 +1,30 @@
+{
+  "schema": "gooo/error-directed-evolution-planner/upstream-lock/v1",
+  "inputs": [
+    {
+      "repository": "kimjooyoon/gooo-reflexive-compiler-slice",
+      "release": "v0.3.0",
+      "tag_object": "d7e2bd301f5d1634e92b0de90d54798a35db424a",
+      "target_commit": "0cf44db8b0d6cd96d190e9f902312d0be9394029",
+      "asset": "gooo-reflexive-compiler-slice-linux-amd64-v0.3.0.tar.gz",
+      "asset_sha256": "sha256:e03b605c14f5d4d0faf262e57556506f8cf7765756aee49a4ceb99fd700ae862",
+      "role": "explanation_carrying_terminal_record_and_phase_oracle",
+      "url": "https://github.com/kimjooyoon/gooo-reflexive-compiler-slice/releases/download/v0.3.0/gooo-reflexive-compiler-slice-linux-amd64-v0.3.0.tar.gz"
+    },
+    {
+      "repository": "kimjooyoon/gooo-semantic-counterexample-reducer",
+      "release": "v0.1.1",
+      "tag_object": "cc225db786718083a81264398096b75a23301646",
+      "target_commit": "395f3faba810f0dd8f091cb6180527c7240eee61",
+      "asset": "reduction-report-v0.1.1.json",
+      "asset_sha256": "sha256:1124d7378125128900827e82f8ab87ab3751b7ab0c06b9fd29e081ed9d28a37c",
+      "role": "minimized_counterexample",
+      "url": "https://github.com/kimjooyoon/gooo-semantic-counterexample-reducer/releases/download/v0.1.1/reduction-report-v0.1.1.json"
+    }
+  ],
+  "policy": {
+    "immutable_release_required": true,
+    "sibling_checkout_consumption": false,
+    "optional_external_consumer": true
+  }
+}

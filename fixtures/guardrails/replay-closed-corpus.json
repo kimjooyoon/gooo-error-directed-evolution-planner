@@ -1,0 +1,10 @@
+{
+  "schema": "gooo/error-directed-evolution-planner/guardrail-corpus/v1",
+  "id": "replay-closed-corpus-v1",
+  "cases": [
+    {"id":"closed-canonical-input","baseline_decision":"CLOSED","candidate_decision":"CLOSED","preserve":true},
+    {"id":"unknown-missing-required-entity","baseline_decision":"UNKNOWN","candidate_decision":"UNKNOWN","preserve":true},
+    {"id":"refuted-duplicate-stable-id","baseline_decision":"REFUTED","candidate_decision":"REFUTED","preserve":true}
+  ]
+}
+
