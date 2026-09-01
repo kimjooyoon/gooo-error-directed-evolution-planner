@@ -35,4 +35,3 @@ func TestUnknownTupleIsComplete(t *testing.T) {
 		t.Fatal("unknown tuple is incomplete")
 	}
 }
-
