@@ -313,8 +313,11 @@ func keyValues(tokens []string) (map[string]string, error) {
 	values := map[string]string{}
 	for _, token := range tokens {
 		key, value, ok := strings.Cut(token, "=")
-		if !ok || key == "" || values[key] != "" {
+		if !ok || key == "" || value == "" {
 			return nil, fmt.Errorf("invalid key/value %q", token)
+		}
+		if _, exists := values[key]; exists {
+			return nil, fmt.Errorf("duplicate key %q", key)
 		}
 		values[key] = value
 	}
